@@ -19,7 +19,9 @@ if not supabase_url or not supabase_key:
 try:
     # 🌟 괄호 비워두기! 
     # YAML의 'google-github-actions/auth' 단계 덕분에 자동으로 연결됩니다.
-    ee.Initialize(project='absolute-cache-478407-p5')
+    ee.Initialize(
+        project='absolute-cache-478407-p5',
+        opt_url='https://earthengine-highvolume.googleapis.com')
     print("✅ Google Earth Engine 인증 성공! (자동 감지)")
 
 except Exception as e:
