@@ -5,11 +5,12 @@ import json
 from datetime import datetime, timedelta
 from supabase import create_client
 from google.oauth2.service_account import Credentials
+from google.oauth2 import service_account
 
 # --- 1. 환경 변수 점검 ---
 print("🔍 환경 변수 및 인증 점검...")
 
-# GEE 키는 YAML에서 처리했으므로 파이썬에서는 Supabase만 챙깁니다.
+gee_earth_engine_key=os.getenv('GEE_SERVICE_ACCOUNT_KEY')
 supabase_url = os.getenv('SUPABASE_URL')
 supabase_key = os.getenv('SUPABASE_KEY')
 
@@ -17,34 +18,19 @@ if not supabase_url or not supabase_key:
     print("❌ [오류] Supabase 설정이 비어있습니다.")
     sys.exit(1)
 
-# --- 2. GEE 초기화 (자동 인증) ---
-import ee
-import os
-import sys
-
-# ... (Supabase 설정 등 기존 코드) ...
-
 # --- 2. GEE 초기화 (수정됨) ---
-ee.Authenticate()
-print("🛰️ Google Earth Engine 초기화 중...")
+EE_PROJECT_ID = os.environ["absolute-cache-478407-p5D"]
 
-try:
-    # ❌ 삭제: ServiceAccountCredentials를 직접 부르는 코드
-    # ❌ 삭제: json.load로 키 파일을 읽는 코드
-    
-    # ✅ 추가: 프로젝트 ID만 넣고 초기화 (환경 변수 자동 감지)
-    ee.Initialize(project='absolute-cache-478407-p5')
-    
-    print("✅ GEE 인증 성공!")
+service_account_info = json.loads(
+    os.environ["GEE_SERVICE_ACCOUNT_KEY"]
+)
 
-except ee.EEException as e:
-    print(f"❌ GEE 인증 실패 (설정 문제): {e}")
-    print("힌트: GitHub Secrets의 GEE_SERVICE_ACCOUNT_KEY가 올바른지,")
-    print("      YAML 파일에 'google-github-actions/auth' 단계가 있는지 확인하세요.")
-    sys.exit(1)
-except Exception as e:
-    print(f"❌ 알 수 없는 에러: {e}")
-    sys.exit(1)
+credentials = service_account.Credentials.from_service_account_info(
+    service_account_info,
+    scopes=["https://www.googleapis.com/auth/earthengine"]
+)
+
+ee.Initialize(credentials, project=EE_PROJECT_ID)
 
 # --- 3. Supabase 연결 ---
 try:
