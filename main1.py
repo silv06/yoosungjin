@@ -20,58 +20,49 @@ if not supabase_url or not supabase_key:
     print("❌ [오류] Supabase 설정이 비어있습니다.")
     sys.exit(1)
 
-print(f"✅ 환경 변수 확인 완료 (GEE 키 길이: {len(gee_key_json)} 자)")
+print(f"✅ 환경 변수 확인 완료")
 
-# --- 2. GEE 초기화 ---
+# --- 2. GEE 초기화 (Service Account 방식) ---
 print("🛰️ Google Earth Engine 초기화 중...")
 
 try:
-    # Windows에서 복사할 때 /n으로 저장된 경우 자동 수정
-    # Linux 환경(GitHub Actions)에서 실행되므로 \n으로 변환
+    # Windows에서 복사 시 /n으로 저장된 경우 자동 수정
     gee_key_json_fixed = gee_key_json.replace('/n', '\n')
     
     # JSON 파싱
     service_account_info = json.loads(gee_key_json_fixed)
-    print(f"✅ JSON 파싱 성공 (client_email: {service_account_info['client_email']})")
+    print(f"✅ JSON 파싱 성공")
     
     # Private Key 추출 및 개행 문자 정규화
     private_key = service_account_info['private_key']
-    
-    # 혹시 private_key 내부에도 /n이 있다면 변환
     if '/n' in private_key:
         private_key = private_key.replace('/n', '\n')
-        print("   ⚠️  Private Key의 /n을 \\n으로 자동 수정")
     
-    # GEE 인증
+    # ⭐ 핵심: Service Account Credentials 생성
     credentials = ee.ServiceAccountCredentials(
         email=service_account_info['client_email'],
         key_data=private_key
     )
     
-    project_id = service_account_info.get('project_id', 'absolute-cache-478407-p5')
-    
+    # ⭐ 핵심: ee.Authenticate() 호출 없이 바로 Initialize
+    # credentials 파라미터로 Service Account 전달
     ee.Initialize(
         credentials=credentials,
-        project=project_id
+        project=service_account_info.get('project_id', 'absolute-cache-478407-p5')
     )
     
     print("✅ GEE 인증 성공!")
+    print(f"   Project: {service_account_info.get('project_id')}")
+    print(f"   Service Account: {service_account_info['client_email']}")
 
 except json.JSONDecodeError as e:
     print(f"❌ JSON 파싱 실패: {e}")
-    print(f"   위치: 문자 {e.pos}")
-    print(f"   힌트: GitHub Secret에 JSON이 올바르게 저장되었는지 확인하세요.")
     sys.exit(1)
 except KeyError as e:
     print(f"❌ JSON에 필수 필드 없음: {e}")
-    print(f"   사용 가능한 필드: {list(service_account_info.keys())}")
-    sys.exit(1)
-except ee.EEException as e:
-    print(f"❌ GEE 인증 실패: {e}")
-    print("   힌트: Service Account가 Earth Engine에 등록되었는지 확인하세요.")
     sys.exit(1)
 except Exception as e:
-    print(f"❌ 알 수 없는 에러: {e}")
+    print(f"❌ GEE 인증 실패: {e}")
     import traceback
     traceback.print_exc()
     sys.exit(1)
@@ -81,7 +72,6 @@ print("🔗 Supabase 연결 중...")
 
 try:
     supabase = create_client(supabase_url, supabase_key)
-    # 데이터가 있는지 확인
     test_query = supabase.table("oreum_metadata").select("id").limit(1).execute().data
     if not test_query:
         print("⚠️  오름 메타데이터 테이블이 비어있습니다.")
@@ -94,7 +84,6 @@ except Exception as e:
 # --- 4. 분석 시작 ---
 print("🛰️ 위성 분석 시작...")
 
-# 메타데이터 전체 가져오기
 metadata = supabase.table("oreum_metadata").select("id, x_coord, y_coord").execute().data
 
 if not metadata:
@@ -144,7 +133,6 @@ try:
         props = f['properties']
         o_id = props.get('oreum_id')
         
-        # 값이 계산된 경우만 (None이 아닌 경우)
         if o_id and props.get('muddy_index') is not None:
             data_dict[o_id] = {
                 "oreum_id": o_id, 
@@ -164,15 +152,9 @@ try:
             on_conflict="oreum_id, date"
         ).execute()
         print(f"🎉 성공! {len(data_to_insert)}건 저장 완료.")
-        print(f"   저장된 날짜: {today_str}")
     else:
-        print("☁️ 구름이 많거나 유효한 위성 데이터가 없습니다.")
-        print("   (지난 30일간 구름 20% 미만 이미지를 찾을 수 없음)")
+        print("☁️ 유효한 위성 데이터가 없습니다.")
 
-except ee.EEException as e:
-    print(f"❌ Earth Engine 분석 중 에러: {e}")
-    print("   힌트: 이미지 컬렉션이나 날짜 범위를 확인하세요.")
-    sys.exit(1)
 except Exception as e:
     print(f"❌ 분석 중 에러: {e}")
     import traceback
