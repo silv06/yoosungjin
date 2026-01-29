@@ -1,45 +1,130 @@
+import ee
+import pandas as pd
+from datetime import datetime, timedelta
+from supabase import create_client
+import json
 import os
 import sys
 
-print("--- 🔍 파이썬 환경 변수 정밀 진단 시작 ---")
+# ---------------------------------------------------------
+# [필수] requirements.txt에 'google-auth'가 꼭 있어야 합니다.
+# ---------------------------------------------------------
+from google.oauth2.service_account import Credentials 
 
-# 1. 현재 파이썬이 볼 수 있는 모든 변수 이름(Key)만 출력
-# (보안을 위해 값은 출력하지 않고 이름만 봅니다)
-env_keys = list(os.environ.keys())
-print(f"현재 감지된 변수 개수: {len(env_keys)}개")
-print(f"변수 목록: {env_keys}")
+# --- 1. 환경 변수 점검 ---
+print("🔍 환경 변수 점검을 시작합니다...")
 
-print("-" * 30)
+gee_key_json = os.getenv('GEE_SERVICE_ACCOUNT_KEY')
+supabase_url = os.getenv('SUPABASE_URL')
+supabase_key = os.getenv('SUPABASE_KEY')
 
-# 2. 우리가 찾는 그 녀석이 있는지 확인
-target_key = 'GEE_SERVICE_ACCOUNT_KEY'
+if not gee_key_json:
+    print("❌ [오류] GEE_SERVICE_ACCOUNT_KEY가 비어있습니다.")
+    sys.exit(1)
+if not supabase_url or not supabase_key:
+    print("❌ [오류] Supabase 설정이 비어있습니다.")
+    sys.exit(1)
 
-if target_key in os.environ:
-    value = os.environ[target_key]
-    print(f"✅ 찾았다! '{target_key}'가 존재합니다.")
-    print(f"   - 데이터 길이: {len(value)} 글자")
-    print(f"   - 첫 5글자: {value[:5]}")
-    print(f"   - 마지막 5글자: {value[-5:]}")
-    
-    # 내용이 비어있는지 체크
-    if not value or value.strip() == "":
-        print("❌ [문제 발견] 변수는 있는데 내용이 '빈칸(Empty)'입니다!")
+# --- 2. GEE 초기화 (만능 키 처리) ---
+try:
+    # 1. JSON 텍스트를 딕셔너리로 변환
+    service_account_info = json.loads(gee_key_json)
+
+    # 🚨 [핵심] 키 포맷 강제 교정 (사용자 요청 반영)
+    if 'private_key' in service_account_info:
+        raw_key = service_account_info['private_key']
+        
+        # (1) '/n'이 있으면 진짜 줄바꿈으로 변경
+        if '/n' in raw_key:
+            print("🔧 키에서 '/n'을 발견하여 줄바꿈으로 교체합니다.")
+            raw_key = raw_key.replace('/n', '\n')
+            
+        # (2) '\\n'이 있으면 진짜 줄바꿈으로 변경 (안전장치)
+        if '\\n' in raw_key:
+            raw_key = raw_key.replace('\\n', '\n')
+            
+        service_account_info['private_key'] = raw_key
+
+    # 2. 구글 인증 객체 생성 (이 방식은 에러가 안 납니다)
+    scopes = ['https://www.googleapis.com/auth/earthengine']
+    credentials = Credentials.from_service_account_info(
+        service_account_info, 
+        scopes=scopes
+    )
+
+    # 3. 초기화
+    ee.Initialize(credentials=credentials, project='absolute-cache-478407-p5')
+    print("✅ Google Earth Engine 인증 성공!")
+
+except json.JSONDecodeError:
+    print("❌ [인증 실패] GEE 키가 올바른 JSON 형식이 아닙니다.")
+    sys.exit(1)
+except Exception as e:
+    print(f"❌ 인증 초기화 중 오류: {e}")
+    sys.exit(1)
+
+# --- 3. Supabase 연결 ---
+try:
+    supabase = create_client(supabase_url, supabase_key)
+    metadata = supabase.table("oreum_metadata").select("id, x_coord, y_coord").execute().data
+    if not metadata:
+        print("⚠️ [주의] 분석할 오름 데이터(metadata)가 없습니다.")
+        sys.exit(0)
+except Exception as e:
+    print(f"❌ Supabase 연결 오류: {e}")
+    sys.exit(1)
+
+# --- 4. 분석 시작 ---
+print("🛰️ 위성 분석 시작...")
+
+def add_all_indices(img):
+    v = {'NIR': img.select('B8'), 'RED': img.select('B4'), 'BLUE': img.select('B2'), 
+         'SWIR1': img.select('B11'), 'SWIR2': img.select('B12')}
+    return img.addBands([
+        img.normalizedDifference(['B3', 'B8']).rename('muddy_index'),
+        img.expression('2.5 * ((NIR - RED) / (NIR + 6 * RED - 7.5 * BLUE + 1))', v).rename('green_visual_index'),
+        img.expression('(NIR - (SWIR1 - SWIR2)) / (NIR + (SWIR1 - SWIR2))', v).rename('fire_risk_index'),
+        img.expression('((SWIR1 + RED) - (NIR + BLUE)) / ((SWIR1 + RED) + (NIR + BLUE))', v).rename('erosion_index')
+    ])
+
+features = ee.FeatureCollection([
+    ee.Feature(ee.Geometry.Point([m['x_coord'], m['y_coord']]), {'oreum_id': m['id']})
+    for m in metadata
+])
+
+today = datetime.now()
+today_str = today.strftime('%Y-%m-%d')
+start_date = (today - timedelta(days=30)).strftime('%Y-%m-%d')
+
+try:
+    latest_image = (ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
+                    .filterDate(start_date, today_str)
+                    .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20))
+                    .map(add_all_indices)
+                    .median())
+
+    results = latest_image.reduceRegions(collection=features, reducer=ee.Reducer.mean(), scale=10).getInfo()
+
+    data_dict = {}
+    for f in results['features']:
+        props = f['properties']
+        o_id = props.get('oreum_id')
+        if o_id and props.get('muddy_index') is not None:
+            data_dict[o_id] = {
+                "oreum_id": o_id, "date": today_str,
+                "muddy_index": props.get('muddy_index'),
+                "green_visual_index": props.get('green_visual_index'),
+                "fire_risk_index": props.get('fire_risk_index'),
+                "erosion_index": props.get('erosion_index')
+            }
+            
+    data_to_insert = list(data_dict.values())
+    if data_to_insert:
+        supabase.table("oreum_daily_stats").upsert(data_to_insert, on_conflict="oreum_id, date").execute()
+        print(f"🎉 성공! {len(data_to_insert)}건 저장 완료.")
     else:
-        print("🆗 내용도 들어있습니다. 이제 JSON 변환을 시도합니다...")
-        import json
-        try:
-            json.loads(value)
-            print("🎉 [최종 판정] JSON 형식이 완벽합니다. 인증이 가능합니다.")
-        except json.JSONDecodeError as e:
-            print(f"❌ [문제 발견] 내용은 있는데 'JSON 형식'이 아닙니다.")
-            print(f"   - 에러 내용: {e}")
-            print("   - 힌트: 복사할 때 괄호 {} 가 잘렸거나 이상한 글자가 섞였습니다.")
+        print("☁️ 구름이 많거나 데이터가 없습니다.")
 
-else:
-    print(f"❌ [문제 발견] '{target_key}'가 변수 목록에 아예 없습니다.")
-    print("👉 결론: 파이썬 코드가 실행되기 전에, 누군가 열쇠를 뺏어갔거나 안 줬습니다.")
-    print("   (YAML 파일의 env 설정이 100% 원인입니다)")
-
-print("--- 진단 종료 ---")
-# 진단만 하고 프로그램 종료 (더 이상 에러 안 나게)
-sys.exit(0)
+except Exception as e:
+    print(f"❌ 분석 및 저장 중 에러: {e}")
+    sys.exit(1)
