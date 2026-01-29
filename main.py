@@ -10,7 +10,6 @@ from google.oauth2 import service_account
 # --- 1. 환경 변수 점검 ---
 print("🔍 환경 변수 및 인증 점검...")
 
-gee_earth_engine_key=os.getenv('GEE_SERVICE_ACCOUNT_KEY')
 supabase_url = os.getenv('SUPABASE_URL')
 supabase_key = os.getenv('SUPABASE_KEY')
 
