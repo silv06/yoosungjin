@@ -2,8 +2,8 @@ name: Daily Oreum Monitoring
 
 on:
   schedule:
-    - cron: '0 21 * * *' # 매일 한국 시간 오전 6시 실행 (UTC 21:00)
-  workflow_dispatch: # 수동 실행 버튼 만들기
+    - cron: '0 21 * * *' # 매일 한국 시간 오전 6시
+  workflow_dispatch: # 수동 실행 버튼
 
 jobs:
   run-gee-analysis:
@@ -16,16 +16,16 @@ jobs:
     - name: 파이썬 설치
       uses: actions/setup-python@v4
       with:
-        python-version: '3.9'
+        python-version: '3.10'
 
     - name: 필수 도구 설치
       run: |
-        pip install earthengine-api pandas supabase
+        pip install earthengine-api pandas supabase google-auth
 
     - name: 분석 코드 실행
+      # 👇 [중요] 이 부분이 없으면 파이썬은 금고를 절대 못 봅니다!
       env:
-        # 금고에서 이름표를 꺼내서 파이썬에게 전달합니다.
         GEE_SERVICE_ACCOUNT_KEY: ${{ secrets.GEE_SERVICE_ACCOUNT_KEY }}
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
         SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-      run: python main.py # 파일 이름이 main.py가 아니면 수정하세요!
+      run: python main.py
