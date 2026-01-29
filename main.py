@@ -6,26 +6,24 @@ import json
 import os
 import sys
 
-# --- 1. 환경 변수 확인 (디버깅용) ---
-print("환경 변수 점검을 시작합니다...")
+# --- 1. 환경 변수(금고) 점검 ---
+print("🔍 환경 변수 점검을 시작합니다...")
 
 gee_key_json = os.getenv('GEE_SERVICE_ACCOUNT_KEY')
 supabase_url = os.getenv('SUPABASE_URL')
 supabase_key = os.getenv('SUPABASE_KEY')
 
-# 금고가 잘 연결되었는지 확인 (내용은 보안상 출력하지 않음)
+# 금고 확인
 if not gee_key_json:
-    print("❌ 오류: 'GEE_SERVICE_ACCOUNT_KEY'가 비어있습니다! 깃허브 Secrets 설정을 확인하세요.")
-    sys.exit(1) # 강제 종료
+    print("❌ [치명적 오류] 'GEE_SERVICE_ACCOUNT_KEY'가 텅 비어있습니다!")
+    print("👉 힌트: 깃허브 Settings > Secrets 에 오타가 있거나 값이 저장되지 않았습니다.")
+    sys.exit(1) # 여기서 강제로 멈춤 (더 이상 진행 안 함)
 else:
-    print(f"✅ GEE 키 확인됨 (길이: {len(gee_key_json)} 자)")
+    print(f"✅ GEE 키 발견됨! (글자 수: {len(gee_key_json)} 자)")
 
 if not supabase_url or not supabase_key:
-    print("❌ 오류: Supabase 설정이 비어있습니다! 깃허브 Secrets 설정을 확인하세요.")
+    print("❌ [오류] Supabase 설정이 비어있습니다.")
     sys.exit(1)
-else:
-    print("✅ Supabase 설정 확인됨")
-
 
 # --- 2. GEE 초기화 ---
 try:
@@ -33,27 +31,16 @@ try:
     credentials = ee.ServiceAccountCredentials(service_account_info['client_email'], info=service_account_info)
     ee.Initialize(credentials, project='absolute-cache-478407-p5')
     print("✅ Google Earth Engine 인증 성공!")
-except json.JSONDecodeError:
-    print("❌ 오류: GEE 키가 올바른 JSON 형식이 아닙니다. 복사/붙여넣기가 잘못되었을 수 있습니다.")
-    sys.exit(1)
 except Exception as e:
-    print(f"❌ 인증 초기화 중 알 수 없는 오류: {e}")
+    print(f"❌ 인증 초기화 중 오류: {e}")
     sys.exit(1)
 
+# --- 3. Supabase 연결 ---
+supabase = create_client(supabase_url, supabase_key)
+metadata = supabase.table("oreum_metadata").select("id, x_coord, y_coord").execute().data
 
-# --- 3. Supabase 초기화 ---
-try:
-    supabase = create_client(supabase_url, supabase_key)
-    # 테스트로 데이터 한번 읽어보기
-    metadata = supabase.table("oreum_metadata").select("id, x_coord, y_coord").execute().data
-    print(f"✅ Supabase 연결 성공! (오름 {len(metadata)}개 로드됨)")
-except Exception as e:
-    print(f"❌ Supabase 연결 실패: {e}")
-    sys.exit(1)
-
-
-# --- 4. 분석 로직 (기존과 동일) ---
-print("🛰️ 위성 이미지 분석 시작...")
+# --- 4. 분석 시작 ---
+print("🛰️ 위성 분석 시작...")
 
 def add_all_indices(img):
     v = {'NIR': img.select('B8'), 'RED': img.select('B4'), 'BLUE': img.select('B2'), 
@@ -87,7 +74,6 @@ try:
     for f in results['features']:
         props = f['properties']
         o_id = props.get('oreum_id')
-        # 값이 있는 경우에만 저장
         if o_id and props.get('muddy_index') is not None:
             data_dict[o_id] = {
                 "oreum_id": o_id, "date": today_str,
@@ -96,14 +82,13 @@ try:
                 "fire_risk_index": props.get('fire_risk_index'),
                 "erosion_index": props.get('erosion_index')
             }
-
+            
     data_to_insert = list(data_dict.values())
-
     if data_to_insert:
         supabase.table("oreum_daily_stats").upsert(data_to_insert, on_conflict="oreum_id, date").execute()
-        print(f"[{datetime.now()}] 🎉 자동 업데이트 성공: {len(data_to_insert)}건 저장 완료.")
+        print(f"🎉 성공! {len(data_to_insert)}건 저장 완료.")
     else:
-        print(f"[{datetime.now()}] ☁️ 저장할 데이터가 없습니다 (구름이 많거나 데이터 부족).")
+        print("☁️ 구름이 많거나 데이터가 없습니다.")
 
 except Exception as e:
-    print(f"❌ 분석 중 오류 발생: {e}")
+    print(f"❌ 분석 중 에러: {e}")
