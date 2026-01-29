@@ -18,7 +18,7 @@ if not supabase_url or not supabase_key:
     sys.exit(1)
 
 # --- 2. GEE 초기화 (수정됨) ---
-PROJECT_ID = os.environ["absolute-cache-478407-p5"]
+EE_PROJECT_ID = os.environ["absolute-cache-478407-p5"]
 
 service_account_info = json.loads(
     os.environ["GEE_SERVICE_ACCOUNT_KEY"]
@@ -30,7 +30,7 @@ credentials = service_account.Credentials.from_service_account_info(
     scopes=["https://www.googleapis.com/auth/earthengine"]
 )
 
-ee.Initialize(credentials, project=PROJECT_ID)
+ee.Initialize(credentials, project=EE_PROJECT_ID)
 
 # --- 3. Supabase 연결 ---
 try:
