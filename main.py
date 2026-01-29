@@ -25,6 +25,7 @@ import sys
 # ... (Supabase 설정 등 기존 코드) ...
 
 # --- 2. GEE 초기화 (수정됨) ---
+ee.Authenticate()
 print("🛰️ Google Earth Engine 초기화 중...")
 
 try:
