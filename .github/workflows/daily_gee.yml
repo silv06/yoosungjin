@@ -1,46 +1,35 @@
-name: Daily Oreum Monitoring
-
-on:
-  schedule:
-    # 매일 한국 시간 오전 6시 (UTC 21:00) 실행
-    - cron: '0 21 * * *'
-  workflow_dispatch: # 수동 실행 버튼 활성화
-
 jobs:
   run-gee-analysis:
     runs-on: ubuntu-latest
-
+    
     steps:
-    # 1. 코드 가져오기
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    # 2. [핵심] 구글 클라우드 인증 (Service Account Key 사용)
-    # 이 단계가 성공하면 'GOOGLE_APPLICATION_CREDENTIALS' 환경 변수가 자동 생성됩니다.
-    - id: 'auth'
-      name: 'Authenticate to Google Cloud'
-      uses: 'google-github-actions/auth@v2'
-      with:
-        credentials_json: '${{ secrets.GEE_SERVICE_ACCOUNT_KEY }}'
+      # 1. 여기서 로그인을 대신 해줍니다. (이 단계가 필수!)
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v1'
+        with:
+          credentials_json: '${{ secrets.GEE_SERVICE_ACCOUNT_KEY }}'
 
-    # 3. 파이썬 설정 (경고 해결을 위해 3.10으로 업그레이드)
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
+      # 2. 파이썬 버전을 3.10으로 올리세요 (경고 제거용)
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10' 
 
-    # 4. 라이브러리 설치 (최신 버전 강제 업데이트)
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install --upgrade earthengine-api google-auth pandas supabase
+      # 3. 라이브러리 설치
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install earthengine-api pandas supabase google-auth
 
-    # 5. 파이썬 코드 실행
-    # GEE 인증 정보는 위 2번 단계에서 이미 환경 변수로 넘어갔으므로,
-    # 여기서는 Supabase 키만 챙겨주면 됩니다.
-    - name: Run analysis script
-      env:
-        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        GEE_JSON_KEY: ${{ secrets.GEE_SERVICE_ACCOUNT_KEY }}
-      run: python main.py
+      # 4. 실행
+      - name: Run analysis script
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          # 팁: GEE 프로젝트 ID도 환경 변수로 빼두면 좋습니다 (선택사항)
+          EE_PROJECT_ID: 'absolute-cache-478407-p5' 
+        run: python main.py

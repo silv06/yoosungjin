@@ -18,34 +18,31 @@ if not supabase_url or not supabase_key:
     sys.exit(1)
 
 # --- 2. GEE 초기화 (자동 인증) ---
-print("🛰️ Google Earth Engine 인증 시작...")
+import ee
+import os
+import sys
+
+# ... (Supabase 설정 등 기존 코드) ...
+
+# --- 2. GEE 초기화 (수정됨) ---
+print("🛰️ Google Earth Engine 초기화 중...")
 
 try:
-    # 1. YAML에서 넘겨준 JSON 키를 문자열로 받음
-    service_account_json = os.environ.get("GEE_JSON_KEY")
+    # ❌ 삭제: ServiceAccountCredentials를 직접 부르는 코드
+    # ❌ 삭제: json.load로 키 파일을 읽는 코드
     
-    if not service_account_json:
-        # 혹시나 키가 없으면, 로컬 테스트용 파일 경로라도 찾아봄 (선택 사항)
-        if os.path.exists('service-account-key.json'):
-            service_account_json = open('service-account-key.json').read()
-        else:
-            raise ValueError("환경변수 'GEE_JSON_KEY'가 없습니다.")
-
-    # 2. JSON 파싱
-    service_account_info = json.loads(service_account_json)
-
-    # 3. 인증 객체 생성 (여기가 핵심! 최신 방식입니다)
-    # 구글 어스 엔진은 범위(Scope) 설정이 꼭 필요합니다.
-    creds = Credentials.from_service_account_info(service_account_info)
-    scoped_creds = creds.with_scopes(['https://www.googleapis.com/auth/earthengine'])
-
-    # 4. 초기화 (만들어진 인증 객체를 직접 전달)
-    ee.Initialize(credentials=scoped_creds, project='absolute-cache-478407-p5')
+    # ✅ 추가: 프로젝트 ID만 넣고 초기화 (환경 변수 자동 감지)
+    ee.Initialize(project='absolute-cache-478407-p5')
     
     print("✅ GEE 인증 성공!")
 
+except ee.EEException as e:
+    print(f"❌ GEE 인증 실패 (설정 문제): {e}")
+    print("힌트: GitHub Secrets의 GEE_SERVICE_ACCOUNT_KEY가 올바른지,")
+    print("      YAML 파일에 'google-github-actions/auth' 단계가 있는지 확인하세요.")
+    sys.exit(1)
 except Exception as e:
-    print(f"❌ 인증 실패: {e}")
+    print(f"❌ 알 수 없는 에러: {e}")
     sys.exit(1)
 
 # --- 3. Supabase 연결 ---
