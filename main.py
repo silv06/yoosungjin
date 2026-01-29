@@ -27,6 +27,7 @@ if not supabase_url or not supabase_key:
 
 # --- 2. GEE 초기화 ---
 try:
+    ee.Authenticate()
     service_account_info = json.loads(gee_key_json)
     credentials = ee.ServiceAccountCredentials(service_account_info['client_email'], info=service_account_info)
     ee.Initialize(credentials, project='absolute-cache-478407-p5')

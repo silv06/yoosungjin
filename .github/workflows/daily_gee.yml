@@ -2,29 +2,35 @@ name: Daily Oreum Monitoring
 
 on:
   schedule:
-    - cron: '0 21 * * *' # 매일 한국 시간 오전 6시
-  workflow_dispatch: # 수동 실행 버튼
+    # 매일 한국 시간 오전 6시 (UTC 21:00) 실행
+    - cron: '0 21 * * *'
+  # 수동으로 실행 버튼(Run workflow)을 누를 수 있게 설정
+  workflow_dispatch:
 
 jobs:
   run-gee-analysis:
     runs-on: ubuntu-latest
 
     steps:
-    - name: 코드 가져오기
+    # 1. 깃허브에 있는 코드(main.py)를 가상 컴퓨터로 가져옵니다.
+    - name: 코드 체크아웃
       uses: actions/checkout@v3
 
-    - name: 파이썬 설치
+    # 2. 파이썬 3.10 버전을 설치합니다. (경고 메시지 해결)
+    - name: 파이썬 설정
       uses: actions/setup-python@v4
       with:
         python-version: '3.10'
 
-    - name: 필수 도구 설치
+    # 3. 필요한 라이브러리들을 설치합니다.
+    - name: 라이브러리 설치
       run: |
         pip install earthengine-api pandas supabase google-auth
 
-    - name: 분석 코드 실행
-      # 👇 [중요] 이 부분이 없으면 파이썬은 금고를 절대 못 봅니다!
+    # 4. [핵심] 금고(Secrets)에서 열쇠를 꺼내 파이썬에게 전달하며 실행합니다.
+    - name: 파이썬 코드 실행
       env:
+        # 👇 이 부분이 없으면 파이썬은 빈 값(None)만 보게 됩니다.
         GEE_SERVICE_ACCOUNT_KEY: ${{ secrets.GEE_SERVICE_ACCOUNT_KEY }}
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
         SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
