@@ -36,4 +36,4 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           # 팁: GEE 프로젝트 ID도 환경 변수로 빼두면 좋습니다 (선택사항)
           EE_PROJECT_ID: 'absolute-cache-478407-p5' 
-        run: python main1.py
+        run: python main.py
