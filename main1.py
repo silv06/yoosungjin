@@ -1,81 +1,48 @@
 import ee
-import pandas as pd
-from datetime import datetime, timedelta
-from supabase import create_client
-import json
 import os
 import sys
-
-# ---------------------------------------------------------
-# [필수] requirements.txt에 'google-auth'가 꼭 있어야 합니다.
-# ---------------------------------------------------------
-from google.oauth2.service_account import Credentials 
+from datetime import datetime, timedelta
+from supabase import create_client
 
 # --- 1. 환경 변수 점검 ---
-print("🔍 환경 변수 점검을 시작합니다...")
+print("🔍 환경 변수 및 인증 점검...")
 
-gee_key_json = os.getenv('GEE_SERVICE_ACCOUNT_KEY')
+# GEE 키는 YAML에서 처리했으므로 파이썬에서는 Supabase만 챙깁니다.
 supabase_url = os.getenv('SUPABASE_URL')
 supabase_key = os.getenv('SUPABASE_KEY')
 
-if not gee_key_json:
-    print("❌ [오류] GEE_SERVICE_ACCOUNT_KEY가 비어있습니다.")
-    sys.exit(1)
 if not supabase_url or not supabase_key:
     print("❌ [오류] Supabase 설정이 비어있습니다.")
     sys.exit(1)
 
-# --- 2. GEE 초기화 (만능 키 처리) ---
+# --- 2. GEE 초기화 (자동 인증) ---
 try:
-    # 1. JSON 텍스트를 딕셔너리로 변환
-    service_account_info = json.loads(gee_key_json)
+    # 🌟 괄호 비워두기! 
+    # YAML의 'google-github-actions/auth' 단계 덕분에 자동으로 연결됩니다.
+    ee.Initialize(project='absolute-cache-478407-p5')
+    print("✅ Google Earth Engine 인증 성공! (자동 감지)")
 
-    # 🚨 [핵심] 키 포맷 강제 교정 (사용자 요청 반영)
-    if 'private_key' in service_account_info:
-        raw_key = service_account_info['private_key']
-        
-        # (1) '/n'이 있으면 진짜 줄바꿈으로 변경
-        if '/n' in raw_key:
-            print("🔧 키에서 '/n'을 발견하여 줄바꿈으로 교체합니다.")
-            raw_key = raw_key.replace('/n', '\n')
-            
-        # (2) '\\n'이 있으면 진짜 줄바꿈으로 변경 (안전장치)
-        if '\\n' in raw_key:
-            raw_key = raw_key.replace('\\n', '\n')
-            
-        service_account_info['private_key'] = raw_key
-
-    # 2. 구글 인증 객체 생성 (이 방식은 에러가 안 납니다)
-    scopes = ['https://www.googleapis.com/auth/earthengine']
-    credentials = Credentials.from_service_account_info(
-        service_account_info, 
-        scopes=scopes
-    )
-
-    # 3. 초기화
-    ee.Initialize(credentials=credentials, project='absolute-cache-478407-p5')
-    print("✅ Google Earth Engine 인증 성공!")
-
-except json.JSONDecodeError:
-    print("❌ [인증 실패] GEE 키가 올바른 JSON 형식이 아닙니다.")
-    sys.exit(1)
 except Exception as e:
-    print(f"❌ 인증 초기화 중 오류: {e}")
+    print(f"❌ 인증 실패: {e}")
     sys.exit(1)
 
 # --- 3. Supabase 연결 ---
 try:
     supabase = create_client(supabase_url, supabase_key)
-    metadata = supabase.table("oreum_metadata").select("id, x_coord, y_coord").execute().data
+    # 데이터가 있는지 살짝 찔러보기
+    metadata = supabase.table("oreum_metadata").select("id").limit(1).execute().data
     if not metadata:
-        print("⚠️ [주의] 분석할 오름 데이터(metadata)가 없습니다.")
-        sys.exit(0)
+        print("⚠️ 오름 메타데이터 테이블이 비어있거나 읽을 수 없습니다.")
+        # 데이터가 없어도 에러는 아니므로 종료하지 않음 (상황에 따라 다름)
 except Exception as e:
     print(f"❌ Supabase 연결 오류: {e}")
     sys.exit(1)
 
 # --- 4. 분석 시작 ---
 print("🛰️ 위성 분석 시작...")
+
+# 메타데이터 전체 가져오기
+metadata = supabase.table("oreum_metadata").select("id, x_coord, y_coord").execute().data
 
 def add_all_indices(img):
     v = {'NIR': img.select('B8'), 'RED': img.select('B4'), 'BLUE': img.select('B2'), 
@@ -103,12 +70,20 @@ try:
                     .map(add_all_indices)
                     .median())
 
+    # reduceRegions는 이미지 범위 내의 Feature에 대해서만 계산합니다.
+    # FeatureCollection이 비어있으면 에러가 날 수 있으니 체크
+    if not metadata:
+        print("☁️ 분석할 오름 데이터가 없습니다.")
+        sys.exit(0)
+
     results = latest_image.reduceRegions(collection=features, reducer=ee.Reducer.mean(), scale=10).getInfo()
 
     data_dict = {}
     for f in results['features']:
         props = f['properties']
         o_id = props.get('oreum_id')
+        
+        # 값이 계산된 경우만 (None이 아닌 경우)
         if o_id and props.get('muddy_index') is not None:
             data_dict[o_id] = {
                 "oreum_id": o_id, "date": today_str,
@@ -119,12 +94,13 @@ try:
             }
             
     data_to_insert = list(data_dict.values())
+    
     if data_to_insert:
         supabase.table("oreum_daily_stats").upsert(data_to_insert, on_conflict="oreum_id, date").execute()
         print(f"🎉 성공! {len(data_to_insert)}건 저장 완료.")
     else:
-        print("☁️ 구름이 많거나 데이터가 없습니다.")
+        print("☁️ 구름이 많거나 유효한 위성 데이터가 없습니다.")
 
 except Exception as e:
-    print(f"❌ 분석 및 저장 중 에러: {e}")
+    print(f"❌ 분석 중 에러: {e}")
     sys.exit(1)

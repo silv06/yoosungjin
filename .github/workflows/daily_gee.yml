@@ -4,7 +4,6 @@ on:
   schedule:
     # 매일 한국 시간 오전 6시 (UTC 21:00) 실행
     - cron: '0 21 * * *'
-  # 수동으로 실행 버튼(Run workflow)을 누를 수 있게 설정
   workflow_dispatch:
 
 jobs:
@@ -12,26 +11,33 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # 1. 깃허브에 있는 코드(main.py)를 가상 컴퓨터로 가져옵니다.
-    - name: 코드 체크아웃
+    # 1. 코드 가져오기
+    - name: Checkout code
       uses: actions/checkout@v3
 
-    # 2. 파이썬 3.10 버전을 설치합니다. (경고 메시지 해결)
-    - name: 파이썬 설정
+    # 2. [핵심] 구글 공식 도구로 먼저 로그인하기
+    # 이 단계가 성공하면 파이썬은 자동으로 인증된 상태가 됩니다.
+    - id: 'auth'
+      name: 'Authenticate to Google Cloud'
+      uses: 'google-github-actions/auth@v1'
+      with:
+        credentials_json: '${{ secrets.GEE_SERVICE_ACCOUNT_KEY }}'
+
+    # 3. 파이썬 설치
+    - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.10'
 
-    # 3. 필요한 라이브러리들을 설치합니다.
-    - name: 라이브러리 설치
+    # 4. 라이브러리 설치
+    - name: Install dependencies
       run: |
         pip install earthengine-api pandas supabase google-auth
 
-    # 4. [핵심] 금고(Secrets)에서 열쇠를 꺼내 파이썬에게 전달하며 실행합니다.
-    - name: 파이썬 코드 실행
+    # 5. 파이썬 코드 실행
+    # 주의: GEE 키는 위(2번)에서 이미 처리했으므로, 여기서는 Supabase 키만 넘겨줍니다.
+    - name: Run analysis script
       env:
-        # 👇 이 부분이 없으면 파이썬은 빈 값(None)만 보게 됩니다.
-        GEE_SERVICE_ACCOUNT_KEY: ${{ secrets.GEE_SERVICE_ACCOUNT_KEY }}
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
         SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
       run: python main.py
