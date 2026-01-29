@@ -16,16 +16,24 @@ if not supabase_url or not supabase_key:
     sys.exit(1)
 
 # --- 2. GEE 초기화 (자동 인증) ---
-try:
-    # 🌟 괄호 비워두기! 
-    # YAML의 'google-github-actions/auth' 단계 덕분에 자동으로 연결됩니다.
-    ee.Initialize(
-        project='absolute-cache-478407-p5',
-        opt_url='https://earthengine-highvolume.googleapis.com')
-    print("✅ Google Earth Engine 인증 성공! (자동 감지)")
+print("🛰️ Google Earth Engine 초기화 중...")
 
+try:
+    # ❌ 삭제: ServiceAccountCredentials를 직접 부르는 코드
+    # ❌ 삭제: json.load로 키 파일을 읽는 코드
+    
+    # ✅ 추가: 프로젝트 ID만 넣고 초기화 (환경 변수 자동 감지)
+    ee.Initialize(project='absolute-cache-478407-p5')
+    
+    print("✅ GEE 인증 성공!")
+
+except ee.EEException as e:
+    print(f"❌ GEE 인증 실패 (설정 문제): {e}")
+    print("힌트: GitHub Secrets의 GEE_SERVICE_ACCOUNT_KEY가 올바른지,")
+    print("      YAML 파일에 'google-github-actions/auth' 단계가 있는지 확인하세요.")
+    sys.exit(1)
 except Exception as e:
-    print(f"❌ 인증 실패: {e}")
+    print(f"❌ 알 수 없는 에러: {e}")
     sys.exit(1)
 
 # --- 3. Supabase 연결 ---
