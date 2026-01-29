@@ -6,6 +6,7 @@ import json
 import os
 
 
+
 # 1. 환경 변수(금고)에서 정보 가져오기
 # 깃허브 금고에 넣은 내용들을 가져옵니다.
 gee_key_json = os.getenv('GEE_SERVICE_ACCOUNT_KEY')
