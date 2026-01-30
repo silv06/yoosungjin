@@ -61,7 +61,7 @@ def add_all_indices(img):
     ])
 
 features = ee.FeatureCollection([
-    ee.Feature(ee.Geometry.Point([m['x_coord'], m['y_coord']]), {'oreum_id': m['id']})
+    ee.Feature(ee.Geometry.Point([m['x_coord'], m['y_coord'].buffer(100)]), {'oreum_id': m['id']})
     for m in metadata
 ])
 
