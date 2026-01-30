@@ -68,6 +68,7 @@ features = ee.FeatureCollection([
     for m in metadata
 ])
 
+
 today = datetime.now()
 today_str = today.strftime('%Y-%m-%d')
 start_date = (today - timedelta(days=30)).strftime('%Y-%m-%d')
