@@ -18,10 +18,10 @@ if not supabase_url or not supabase_key:
     sys.exit(1)
 
 # --- 2. GEE 초기화 (수정됨) ---
-EE_PROJECT_ID = os.environ["absolute-cache-478407-p5"]
+EE_PROJECT_ID = os.environ["EE_PROJECT_ID"]
 
 service_account_info = json.loads(
-    os.environ["GEE_SERVICE_ACCOUNT_KEY"]
+    os.environ["EE_SERVICE_ACCOUNT_KEY"]
 )
 
 
