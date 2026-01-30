@@ -5,7 +5,7 @@ permissions:
 on:
   schedule:
     - cron: '0 0 * * *'
-  workflow_dispatch:      # <--- 이 부분이 있어야 버튼이 생깁니다!
+  workflow_dispatch:
 
 jobs:
   run-gee-analysis:
@@ -15,7 +15,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # 1. 여기서 로그인을 대신 해줍니다. (이 단계가 필수!)
+      # 1. 여기서 로그인을 대신 해줍니다.
       - id: 'auth'
         name: 'Authenticate to Google Cloud'
         uses: 'google-github-actions/auth@v1'
@@ -39,7 +39,6 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          # 팁: GEE 프로젝트 ID도 환경 변수로 빼두면 좋습니다 (선택사항)
           EE_PROJECT_ID: 'absolute-cache-478407-p5' 
           EE_SERVICE_ACCOUNT_KEY: ${{ secrets.GEE_SERVICE_ACCOUNT_KEY}}
         run: python main.py
